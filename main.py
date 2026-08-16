@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import yt_dlp
+import requests
+import re
 
 app = FastAPI()
 
@@ -12,6 +13,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def extract_video_id(url: str) -> str:
+    match = re.search(r"(?:v=|\/|be\/)([\w-]{11})", url)
+    return match.group(1) if match else ""
+
 @app.get("/")
 def home():
     return {"status": "ok"}
@@ -21,28 +26,31 @@ def get_video_info(url: str):
     if not url:
         raise HTTPException(status_code=400, detail="Missing URL parameter")
     
-    # הגדרות מורחבות לעקיפת חסימות Bot של יוטיוב
-    ydl_opts = {
-        'format': 'best',
-        'quiet': True,
-        'no_warnings': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web']
-            }
-        }
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "url": url,
+        "videoQuality": "max"
     }
     
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+        response = requests.post("https://api.cobalt.tools/", json=payload, headers=headers, timeout=12)
+        data = response.json()
+        
+        if response.status_code != 200 or data.get("status") in ["error", "rate-limit"]:
+            error_msg = data.get("text", "לא ניתן לחלץ את הסרטון")
+            raise HTTPException(status_code=500, detail=error_msg)
             
-            return {
-                "title": info.get("title", "Video"),
-                "thumbnail": info.get("thumbnail"),
-                "duration": info.get("duration"),
-                "download_url": info.get("url")
-            }
+        video_id = extract_video_id(url)
+        thumbnail_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg" if video_id else None
+        
+        return {
+            "title": "סרטון YouTube",
+            "thumbnail": thumbnail_url,
+            "download_url": data.get("url")
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

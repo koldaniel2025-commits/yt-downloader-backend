@@ -4,12 +4,18 @@ import yt_dlp
 
 app = FastAPI()
 
+# הגדרת CORS מלאה כדי ש-Base44 לא יחסום את הבקשה
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+def home():
+    return {"status": "ok", "message": "Server is running"}
 
 @app.get("/api/download")
 def get_video_info(url: str):
@@ -17,7 +23,7 @@ def get_video_info(url: str):
         raise HTTPException(status_code=400, detail="Missing URL parameter")
     
     ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'format': 'best',
         'quiet': True,
         'no_warnings': True,
     }
